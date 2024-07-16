@@ -24,6 +24,89 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#define NOTE_C4 262
+#define NOTE_D4 294
+#define NOTE_E4 330
+#define NOTE_F4 349
+#define NOTE_G4 392
+#define NOTE_A4 440
+#define NOTE_AS4 466
+#define NOTE_C5 523
+#define PI 3.14159
+uint16_t IV[6000];
+
+int melody[] = {
+	NOTE_C4,
+	NOTE_C4,
+	NOTE_D4,
+	NOTE_C4,
+	NOTE_F4,
+	NOTE_E4, // "Happy Birthday to You"
+	NOTE_C4,
+	NOTE_C4,
+	NOTE_D4,
+	NOTE_C4,
+	NOTE_G4,
+	NOTE_F4,
+	// "Happy Birthday to You"
+	NOTE_C4,
+	NOTE_C4,
+	NOTE_C5,
+	NOTE_A4,
+	NOTE_F4,
+	NOTE_E4,
+	NOTE_D4,
+	// "Happy Birthday dear [Name]"
+	NOTE_AS4,
+	NOTE_AS4,
+	NOTE_A4,
+	NOTE_F4,
+	NOTE_G4,
+	NOTE_F4, // "Happy Birthday to You"
+};
+
+int noteDurations[] = {
+	4,
+	4,
+	4,
+	4,
+	4,
+	2,
+	4,
+	4,
+	4,
+	4,
+	4,
+	2,
+	4,
+	4,
+	4,
+	4,
+	4,
+	4,
+	2,
+	4,
+	4,
+	4,
+	4,
+	4,
+	8,
+};
+
+const int sampleTime_us = 25; // Sample time in microseconds
+
+uint16_t calculateSineWave(float freq)
+{
+	float increment = 2.0 * PI * freq / 1000000.0 * sampleTime_us;
+	uint16_t size = (int)(1 / freq * 1000000.0 / sampleTime_us);
+
+		for (int i = 0; i < size; i++)
+		{
+			IV[i] = (uint16_t) rint(900 + 499*(sinf(i * increment)));
+		}
+	return size;
+}
+
 
 /* USER CODE END Includes */
 
@@ -65,20 +148,34 @@ static void MX_ADC1_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
-#define PI 3.14159
-#define ASR 0.45 //360 / 800 = 0.45
+//#define ASR 6.79 //360 / 53 
 uint16_t Wave[400];
 uint16_t WaveBuffer[400];
 uint16_t Duty[400];
-uint8_t ProcessDataFlag = 0;
+uint16_t DutyBuffer[400];
+uint8_t ADCProcessDataFlag = 0;
+uint8_t PWMProcessDataFlag = 0;
+uint8_t	PWMProcessHalfCplt = 0;
+uint16_t Division = 4000;
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
-	ProcessDataFlag = 1;
+	ADCProcessDataFlag = 1;
+//	uint16_t Test = HAL_ADC_GetValue(hadc);
+} 
+void HAL_TIM_PWM_PulseFinishedHalfCpltCallback(TIM_HandleTypeDef *htim)
+{
+	PWMProcessHalfCplt = 1;
+	
 }
+void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
+{
+	PWMProcessDataFlag = 1;
+}
+
 
 /* USER CODE END 0 */
 
@@ -115,36 +212,102 @@ int main(void)
   MX_TIM1_Init();
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
-//  uint16_t IV[800];
+//  uint16_t IV[53];
 //  float angle;
 //  
-//  for (uint16_t i = 0; i < 800; i++) {
+//  for (uint16_t i = 0; i < 53; i++) {
+//#define ASR 6.79 //360 / 53 
 //  angle = ASR*(float)i;
-//  IV[i] = (uint16_t) rint(100 + 99*sinf(angle*(PI/180)));
+//  IV[i] = (uint16_t) rint(900 + 899*sinf(angle*(PI/180)));
 //  }
-
-	//HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_1,(uint32_t*)IV,800);
-	//HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
+//
+//	HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_1,(uint32_t*)IV,53);
+//	HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
 
 	HAL_TIM_Base_Start(&htim3);
-	HAL_ADCEx_Calibration_Start(&hadc1);
-	HAL_ADC_Start_DMA(&hadc1, (uint32_t*)Wave, 20);
-	//HAL_TIMEx_PWMN_Start_DMA(&htim1, TIM_CHANNEL_1,(uint32_t*)IV,800);
+//	HAL_ADCEx_Calibration_Start(&hadc1);
+//	HAL_ADC_Start_DMA(&hadc1, (uint32_t*)Wave, 400);	
+	//HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_1, (uint32_t*)Duty, 400);
+	uint8_t thisNote = 0;
+    uint8_t length = 0;
+    length = calculateSineWave(melody[thisNote]);
+	HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_1, (uint32_t*)IV, length);
+    HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
 
+
+//	uint8_t a = 0;
+//	uint32_t b = 0;
+	uint32_t c = 0;
+	int16_t AA = 0;
+	//float waveData[40000];
+	int waveSize = 0;
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  if (ProcessDataFlag == 1)
+	  if (ADCProcessDataFlag == 1)
 	  {
-//		  memcpy(WaveBuffer, Wave, 400 * 2);
-//		  for (uint16_t i = 0; i < 400; i++)
-//			  Duty[i] =  map(WaveBuffer[i], 0, 4095, 0, 1800);
-//		  HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_1, (uint32_t*)Duty, 400);
+
+		  memcpy(WaveBuffer, Wave, 400 * 2);
+		  for (uint16_t i = 0; i < 400; i++)
+		  {
+			  AA =  map(WaveBuffer[i], 0, 4095, -450, 450);
+			  DutyBuffer[i] = AA + 900;
+		  }
+
+//		  if (a % 2 == 0)
+//			  for (uint16_t i = 0; i < 400; i++)
+//				  DutyBuffer[i] =  900;
+//		  if (a % 2 == 1)
+//			  for (uint16_t i = 0; i < 400; i++)
+//				  DutyBuffer[i] =  450;
+
+//		  HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_1, (uint32_t*)DutyBuffer, 400);
 //		  HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
-//		  ProcessDataFlag = 0;
+//		  a++;
+//		  b++;
+		  ADCProcessDataFlag = 0;
+	  }
+	  if (PWMProcessHalfCplt == 1)
+	  {
+//		  calculateSineWave(melody[thisNote], 1);
+		  PWMProcessHalfCplt = 0;
+	  }
+	  
+	  if (PWMProcessDataFlag == 1)
+	  {
+//		  memcpy(Duty, DutyBuffer, 400 * 2);
+
+//		  float angle;
+//		  float ASR = 360 / (float)Division;
+//		  for (uint16_t i = 0; i < 4000; i++) {
+//			  angle = ASR*(float)i;
+//			  IV[i] = (uint16_t) rint(900 + 899*sinf(angle*(PI / 180)));
+//		  }
+//		  Division -= 10;
+//		  if (Division < 10)
+//			  Division = 4000;
+
+
+			  //int pauseBetweenNotes = (noteDuration * 1.50)/150;
+		  int noteDuration = 1000 / noteDurations[thisNote];
+		  int pauseBetweenNotes = (noteDuration  / (length * 0.025));
+//			  delay(pauseBetweenNotes);
+		  if (c ==  pauseBetweenNotes) 
+		  {
+			  thisNote++;
+			  if (thisNote == 25)
+				  thisNote = 0;
+			  length = calculateSineWave(melody[thisNote]);
+			  c = 0;
+		  }
+
+		  HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_1, (uint32_t*)IV, length);
+		  HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
+		  c++;
+		  PWMProcessDataFlag = 0;
 	  }
     /* USER CODE END WHILE */
 
@@ -266,9 +429,9 @@ static void MX_TIM1_Init(void)
 
   /* USER CODE END TIM1_Init 1 */
   htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 9 - 1;
+  htim1.Init.Prescaler = 0;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 199 - 1;
+  htim1.Init.Period = 1800 - 1;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -332,7 +495,7 @@ static void MX_TIM3_Init(void)
   htim3.Instance = TIM3;
   htim3.Init.Prescaler = 0;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 18000 - 1;
+  htim3.Init.Period = 1800 - 1;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
