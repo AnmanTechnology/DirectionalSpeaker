@@ -149,31 +149,35 @@ static void MX_TIM1_Init(void);
 static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 //#define ASR 6.79 //360 / 53 
-uint16_t Wave[400];
-uint16_t WaveBuffer[400];
-uint16_t Duty[400];
-uint16_t DutyBuffer[400];
-uint8_t ADCProcessDataFlag = 0;
-uint8_t PWMProcessDataFlag = 0;
-uint8_t	PWMProcessHalfCplt = 0;
-uint16_t Division = 4000;
+uint16_t Wave[2000];
+uint16_t WaveBuffer[2000];
+uint16_t Duty[2000];
+uint16_t DutyBuffer[2000];
+uint8_t ADCConvHalfCpltFlag = 0;
+uint8_t ADCConvCpltFlag = 0;
+uint8_t PWMPulseFinishCpltFlag = 0;
+uint8_t PWMPulseFinishHalfCpltFlag = 0;
+uint8_t DataHalfCplt = 0;
+uint8_t DataCplt = 0;
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc)
+{
+	ADCConvHalfCpltFlag = 1;
+}
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
-	ADCProcessDataFlag = 1;
-//	uint16_t Test = HAL_ADC_GetValue(hadc);
+	ADCConvCpltFlag = 1;
 } 
 void HAL_TIM_PWM_PulseFinishedHalfCpltCallback(TIM_HandleTypeDef *htim)
 {
-	PWMProcessHalfCplt = 1;
-	
+	PWMPulseFinishHalfCpltFlag = 1;
 }
 void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 {
-	PWMProcessDataFlag = 1;
+	PWMPulseFinishCpltFlag = 1;
 }
 
 
@@ -212,102 +216,67 @@ int main(void)
   MX_TIM1_Init();
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
-//  uint16_t IV[53];
-//  float angle;
-//  
-//  for (uint16_t i = 0; i < 53; i++) {
-//#define ASR 6.79 //360 / 53 
-//  angle = ASR*(float)i;
-//  IV[i] = (uint16_t) rint(900 + 899*sinf(angle*(PI/180)));
-//  }
-//
-//	HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_1,(uint32_t*)IV,53);
-//	HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
 
 	HAL_TIM_Base_Start(&htim3);
-//	HAL_ADCEx_Calibration_Start(&hadc1);
-//	HAL_ADC_Start_DMA(&hadc1, (uint32_t*)Wave, 400);	
-	//HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_1, (uint32_t*)Duty, 400);
-	uint8_t thisNote = 0;
-    uint8_t length = 0;
-    length = calculateSineWave(melody[thisNote]);
-	HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_1, (uint32_t*)IV, length);
+	HAL_ADCEx_Calibration_Start(&hadc1);
+	HAL_ADC_Start_DMA(&hadc1, (uint32_t*)Wave, 2000);	
+	HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_1, (uint32_t*)Duty, 2000);
     HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
 
-
-//	uint8_t a = 0;
-//	uint32_t b = 0;
-	uint32_t c = 0;
-	int16_t AA = 0;
-	//float waveData[40000];
-	int waveSize = 0;
+	int16_t ProcessedData = 0;
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  if (ADCProcessDataFlag == 1)
+	  if (ADCConvHalfCpltFlag || ADCConvCpltFlag)
 	  {
 
-		  memcpy(WaveBuffer, Wave, 400 * 2);
-		  for (uint16_t i = 0; i < 400; i++)
+		  uint16_t *ptrDuty = NULL;
+		  size_t length =  sizeof(Wave)  / sizeof(uint16_t);
+		  if (ADCConvHalfCpltFlag)
 		  {
-			  AA =  map(WaveBuffer[i], 0, 4095, -450, 450);
-			  DutyBuffer[i] = AA + 900;
+			  memcpy(WaveBuffer, Wave, (length / 2) * sizeof(uint16_t));
+			  ptrDuty = DutyBuffer;
+			  ADCConvHalfCpltFlag = 0;
+			  DataHalfCplt = 1;
 		  }
-
-//		  if (a % 2 == 0)
-//			  for (uint16_t i = 0; i < 400; i++)
-//				  DutyBuffer[i] =  900;
-//		  if (a % 2 == 1)
-//			  for (uint16_t i = 0; i < 400; i++)
-//				  DutyBuffer[i] =  450;
-
-//		  HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_1, (uint32_t*)DutyBuffer, 400);
-//		  HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
-//		  a++;
-//		  b++;
-		  ADCProcessDataFlag = 0;
+		  else if (ADCConvCpltFlag)
+		  {
+			  memcpy(WaveBuffer, Wave + (length / 2), (length / 2) * sizeof(uint16_t));
+			  ptrDuty = DutyBuffer + length / 2;
+			  ADCConvCpltFlag = 0;
+			  DataCplt = 1;
+		  }
+		  for (uint16_t i = 0; i < length / 2; i++)
+		  {
+			  ProcessedData =  map(WaveBuffer[i], 0, 4095, -450, 450);
+			  ptrDuty[i] = ProcessedData + 900;
+		  }
 	  }
-	  if (PWMProcessHalfCplt == 1)
+	  if (PWMPulseFinishHalfCpltFlag || PWMPulseFinishCpltFlag)
 	  {
-//		  calculateSineWave(melody[thisNote], 1);
-		  PWMProcessHalfCplt = 0;
-	  }
+		  size_t length =  sizeof(Wave)  / sizeof(uint16_t);
+		  if (PWMPulseFinishHalfCpltFlag)
+		  {
+			  if (DataHalfCplt)
+			  {
+				  memcpy(Duty, DutyBuffer, (length / 2)*sizeof(uint16_t));
+				  PWMPulseFinishHalfCpltFlag = 0;
+				  DataHalfCplt = 0;
+			  }
+		  }
 	  
-	  if (PWMProcessDataFlag == 1)
-	  {
-//		  memcpy(Duty, DutyBuffer, 400 * 2);
-
-//		  float angle;
-//		  float ASR = 360 / (float)Division;
-//		  for (uint16_t i = 0; i < 4000; i++) {
-//			  angle = ASR*(float)i;
-//			  IV[i] = (uint16_t) rint(900 + 899*sinf(angle*(PI / 180)));
-//		  }
-//		  Division -= 10;
-//		  if (Division < 10)
-//			  Division = 4000;
-
-
-			  //int pauseBetweenNotes = (noteDuration * 1.50)/150;
-		  int noteDuration = 1000 / noteDurations[thisNote];
-		  int pauseBetweenNotes = (noteDuration  / (length * 0.025));
-//			  delay(pauseBetweenNotes);
-		  if (c ==  pauseBetweenNotes) 
+		  if (PWMPulseFinishCpltFlag == 1)
 		  {
-			  thisNote++;
-			  if (thisNote == 25)
-				  thisNote = 0;
-			  length = calculateSineWave(melody[thisNote]);
-			  c = 0;
+			  if (DataCplt)
+			  {
+				  memcpy(Duty + (length / 2), DutyBuffer + (length / 2), (length / 2)*sizeof(uint16_t));
+				  PWMPulseFinishCpltFlag = 0;
+				  DataCplt = 0;
+			  }
 		  }
-
-		  HAL_TIM_PWM_Start_DMA(&htim1, TIM_CHANNEL_1, (uint32_t*)IV, length);
-		  HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
-		  c++;
-		  PWMProcessDataFlag = 0;
 	  }
     /* USER CODE END WHILE */
 
@@ -398,7 +367,7 @@ static void MX_ADC1_Init(void)
   */
   sConfig.Channel = ADC_CHANNEL_7;
   sConfig.Rank = ADC_REGULAR_RANK_1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
+  sConfig.SamplingTime = ADC_SAMPLETIME_71CYCLES_5;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
     Error_Handler();
